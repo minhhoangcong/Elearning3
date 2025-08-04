@@ -935,3 +935,18 @@ h1 {
   transform: translateY(-2px) scale(1.07);
   box-shadow: 0 4px 12px rgba(0, 123, 255, 0.15);
 }
+/*trang trí đồng hồ*/
+.countdown-timer {
+  background: #fff5f5;
+  border: 2px solid #ffcccc;
+  border-radius: 10px;
+  padding: 10px 20px;
+  margin: 0 auto 10px auto;
+  display: inline-block;
+  font-size: 1.1em;
+  box-shadow: 0 2px 8px rgba(255, 0, 0, 0.07);
+}
+#timer-value {
+  color: #ff2222;
+  font-weight: bold;
+}
