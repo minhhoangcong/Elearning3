@@ -501,6 +501,7 @@ function sendChoice(choice) {
       currentRoom.scores["Bot"].draws += 1;
     }
 
+
     // 🎯 Cập nhật bảng điểm ngay lập tức
     updateScoreboard(currentRoom);
 
