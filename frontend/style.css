@@ -5,7 +5,7 @@
 }
 
 body {
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   min-height: 100vh;
   color: #333;
@@ -22,7 +22,7 @@ h1 {
   color: white;
   font-size: 2.5em;
   margin-bottom: 30px;
-  text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
 }
 
 /* Màn hình */
@@ -32,7 +32,7 @@ h1 {
   border-radius: 15px;
   padding: 30px;
   margin-bottom: 20px;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
 }
 
 .screen.active {
@@ -153,7 +153,7 @@ h1 {
 .room-card:hover {
   border-color: #007bff;
   transform: translateY(-3px);
-  box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
 }
 
 .room-card.full {
@@ -311,7 +311,7 @@ h1 {
   align-items: center;
   width: 600px;
   max-width: 45%;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
 }
 
 .players-list h3 {
@@ -344,7 +344,7 @@ h1 {
   height: 200px;
   transition: all 0.3s ease;
   position: relative;
-  box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
   justify-content: center;
 }
 
@@ -415,7 +415,7 @@ h1 {
   font-weight: bold;
   color: white;
   margin-bottom: 20px;
-  box-shadow: 0 8px 20px rgba(0,0,0,0.3);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
 }
 
 .player-info {
@@ -459,7 +459,7 @@ h1 {
   align-items: center;
   width: 400px;
   max-width: 45%;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
 }
 
 .scoreboard h3 {
@@ -521,7 +521,7 @@ h1 {
   font-size: 16px;
   font-weight: bold;
   color: white;
-  box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
 }
 
 .score-item .player-name {
@@ -602,12 +602,12 @@ h1 {
   cursor: pointer;
   transition: all 0.3s ease;
   min-width: 120px;
-  box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
 }
 
 .choice-btn:hover {
   transform: translateY(-5px);
-  box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
   border-color: #667eea;
 }
 
@@ -757,79 +757,79 @@ h1 {
   .container {
     padding: 10px;
   }
-  
+
   h1 {
     font-size: 2em;
   }
-  
+
   .room-info {
     flex-direction: column;
     align-items: center;
     gap: 20px;
   }
-  
+
   .players-list {
     width: 95%;
     padding: 30px 20px;
     max-width: 100%;
   }
-  
+
   .scoreboard {
     width: 95%;
     padding: 25px 20px;
     max-width: 100%;
   }
-  
+
   #players-list {
     gap: 40px;
   }
-  
+
   .player-item {
     width: 150px;
     height: 150px;
     padding: 20px;
   }
-  
+
   .player-avatar {
     width: 60px;
     height: 60px;
     font-size: 24px;
   }
-  
+
   .player-name {
     font-size: 14px;
   }
-  
+
   .main-actions {
     flex-direction: column;
   }
-  
+
   .action-btn {
     min-width: auto;
   }
-  
+
   .rooms-grid {
     grid-template-columns: 1fr;
   }
-  
+
   .choices {
     gap: 10px;
   }
-  
+
   .choice-btn {
     min-width: 100px;
     padding: 15px;
   }
-  
+
   .choice-icon {
     font-size: 2.5em;
   }
-  
+
   .name-input {
     flex-direction: column;
     align-items: stretch;
   }
-  
+
   .name-input input {
     min-width: auto;
   }
@@ -839,40 +839,99 @@ h1 {
   .screen {
     padding: 15px;
   }
-  
+
   .form-actions {
     flex-direction: column;
   }
-  
+
   .room-header {
     flex-direction: column;
     gap: 10px;
   }
-  
+
   .players-list {
     width: 100%;
     padding: 20px 15px;
   }
-  
+
   #players-list {
     gap: 20px;
     flex-direction: column;
   }
-  
+
   .player-item {
     width: 120px;
     height: 120px;
     padding: 15px;
   }
-  
+
   .player-avatar {
     width: 50px;
     height: 50px;
     font-size: 20px;
   }
-  
+
   .player-name {
     font-size: 12px;
   }
 }
-  
+/*chat section*/
+.chat-section {
+  margin-top: 30px;
+  background: #f8f9fa;
+  border-radius: 12px;
+  padding: 20px;
+}
+.chat-messages {
+  min-height: 80px;
+  max-height: 180px;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid #eee;
+  border-radius: 8px;
+  padding: 10px;
+  margin-bottom: 10px;
+  font-size: 0.97em;
+}
+.chat-message {
+  margin-bottom: 8px;
+  word-break: break-all;
+}
+.chat-message.me {
+  color: #007bff;
+  font-weight: bold;
+}
+.chat-message.system {
+  color: #888;
+  font-style: italic;
+}
+.chat-input-row {
+  display: flex;
+  gap: 8px;
+}
+#chat-input {
+  flex: 1;
+  padding: 7px 12px;
+  border-radius: 6px;
+  border: 1.5px solid #ddd;
+}
+.chat-send-btn {
+  padding: 8px 22px;
+  background: #007bff;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: bold;
+  transition: background 0.22s, box-shadow 0.22s, transform 0.22s;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  outline: none;
+}
+
+.chat-send-btn:hover,
+.chat-send-btn:focus {
+  background: #0056b3;
+  transform: translateY(-2px) scale(1.07);
+  box-shadow: 0 4px 12px rgba(0, 123, 255, 0.15);
+}
