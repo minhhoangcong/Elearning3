@@ -426,6 +426,22 @@ function handleGameResult(data) {
   // Thêm vào lịch sử
   addToHistory(choices, results);
 
+  // Phát âm thanh tương ứng với kết quả
+  const winSound = document.getElementById("win-sound");
+  const loseSound = document.getElementById("lose-sound");
+  const drawSound = document.getElementById("draw-sound");
+
+  // Lặp qua kết quả của từng người chơi và phát âm thanh cho đúng
+  for (const [playerName, result] of Object.entries(results)) {
+    if (result === "win") {
+      winSound.play();
+    } else if (result === "lose") {
+      loseSound.play();
+    } else {
+      drawSound.play();
+    }
+  }
+
   // Cập nhật bảng điểm với điểm số mới
   if (currentRoom && scores) {
     console.log("Cập nhật scores cho currentRoom:", scores);
@@ -526,7 +542,14 @@ function sendChoice(choice) {
     showNotification("Bạn đã chọn rồi, đang chờ người khác...", "info");
     return;
   }
+  // Phát âm thanh khi người chơi chọn
+  const clickSound = document.getElementById("click-sound");
 
+  // Đảm bảo âm thanh được phát ngay lập tức
+  clickSound.play().catch(function (error) {
+    console.log("Lỗi khi phát âm thanh:", error);
+  });
+  playSound("click-sound");
   currentChoice = choice;
   isWaitingForOpponent = true;
 
@@ -543,7 +566,24 @@ function sendChoice(choice) {
 
   updateGameStatus("Đã chọn! Đang chờ người khác...");
 }
+const audioContext = new (window.AudioContext || window.webkitAudioContext)();
 
+function playSound(soundId) {
+  const sound = document.getElementById(soundId);
+  const audioSource = audioContext.createBufferSource();
+  const request = new XMLHttpRequest();
+  request.open("GET", sound.src, true);
+  request.responseType = "arraybuffer";
+
+  request.onload = function () {
+    audioContext.decodeAudioData(request.response, function (buffer) {
+      audioSource.buffer = buffer;
+      audioSource.connect(audioContext.destination);
+      audioSource.start(0);
+    });
+  };
+  request.send();
+}
 // Cập nhật bảng điểm
 function updateScoreboard(room) {
   const scoreboard = document.getElementById("scoreboard");
