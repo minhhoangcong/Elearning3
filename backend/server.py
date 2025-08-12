@@ -102,15 +102,17 @@ class GameServer:
     
     def compare_choices(self, choices: Dict[str, List[websockets.WebSocketServerProtocol]]) -> Dict[websockets.WebSocketServerProtocol, str]:
         """So sánh lựa chọn và trả về kết quả cho từng người chơi"""
-        results = {}
-        
+        results: Dict[websockets.WebSocketServerProtocol, str] = {}
+
         # Đếm số lượng mỗi lựa chọn
         choice_counts = {choice: len(players) for choice, players in choices.items()}
 
+        # Nếu tất cả chọn giống nhau hoặc có cả ba lựa chọn -> hòa
+        if len(choice_counts) < 2 or len(choice_counts) == 3:
+            for players in choices.values():
                 for player in players:
                     results[player] = 'draw'
             return results
-
 
         winning_choice = None
         if 'rock' in choice_counts and 'scissors' in choice_counts:
@@ -120,7 +122,7 @@ class GameServer:
         elif 'paper' in choice_counts and 'rock' in choice_counts:
             winning_choice = 'paper'
 
-        # Phân bổ kết quả
+        # Phân bổ kết quả cho từng người chơi
         for choice, players in choices.items():
             for player in players:
                 if choice == winning_choice:
@@ -141,22 +143,24 @@ class GameServer:
                 room.scores[player]['losses'] += 1
             else:  # draw
                 room.scores[player]['draws'] += 1
+
     async def handle_chat(self, websocket, data):
         room_id = self.get_player_room(websocket)
         if not room_id:
-         return
+            return
         player_name = self.clients[websocket]['name']
         message_text = data.get('message', '')
         if not message_text.strip():
-         return  # Không gửi tin nhắn rỗng
+            return  # Không gửi tin nhắn rỗng
         # In ra log server
         print(f"[CHAT] Phòng {room_id} - {player_name}: {message_text}")
         # Gửi lại cho tất cả người chơi trong phòng
         await self.broadcast_to_room(room_id, {
-        'type': 'chat',
-        'player_name': player_name,
-        'message': message_text
-    })
+            'type': 'chat',
+            'player_name': player_name,
+            'message': message_text
+        })
+
     async def handle_client(self, websocket: websockets.WebSocketServerProtocol, path: str):
         """Xử lý kết nối của client"""
         player_id = self.get_next_player_id()
