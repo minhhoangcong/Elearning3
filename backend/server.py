@@ -107,10 +107,10 @@ class GameServer:
         # Đếm số lượng mỗi lựa chọn
         choice_counts = {choice: len(players) for choice, players in choices.items()}
 
-
                 for player in players:
                     results[player] = 'draw'
             return results
+
 
         winning_choice = None
         if 'rock' in choice_counts and 'scissors' in choice_counts:
