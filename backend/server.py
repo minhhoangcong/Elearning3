@@ -106,23 +106,12 @@ class GameServer:
         
         # Đếm số lượng mỗi lựa chọn
         choice_counts = {choice: len(players) for choice, players in choices.items()}
-        unique_choices = len(choice_counts)
 
-        # Nếu tất cả chọn giống nhau -> hòa
-        if unique_choices == 1:
-            for players in choices.values():
                 for player in players:
                     results[player] = 'draw'
             return results
 
-        # Nếu cả 3 lựa chọn đều xuất hiện -> hòa
-        if unique_choices == 3:
-            for players in choices.values():
-                for player in players:
-                    results[player] = 'draw'
-            return results
 
-        # Xác định lựa chọn thắng cho trường hợp có 2 lựa chọn
         winning_choice = None
         if 'rock' in choice_counts and 'scissors' in choice_counts:
             winning_choice = 'rock'

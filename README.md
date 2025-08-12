@@ -30,10 +30,10 @@ pip install websockets
 
 ```bash
 cd backend
-python sever.py
+python server.py
 ```
 
-Server sẽ chạy tại `ws://localhost:8081`
+Server sẽ chạy tại `ws://localhost:8082`
 
 ### Bước 3: Mở trò chơi
 

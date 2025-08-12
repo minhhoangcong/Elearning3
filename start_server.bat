@@ -10,6 +10,6 @@ pip install -r requirements.txt
 echo.
 echo Dang khoi dong server...
 cd backend
-python sever.py
+python server.py
 
-pause 
+pause
