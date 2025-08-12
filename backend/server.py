@@ -107,21 +107,11 @@ class GameServer:
         # Đếm số lượng mỗi lựa chọn
         choice_counts = {choice: len(players) for choice, players in choices.items()}
 
-        # Nếu chỉ có 1 loại lựa chọn -> tất cả hòa
-        if len(choice_counts) == 1:
-            for choice, players in choices.items():
+
                 for player in players:
                     results[player] = 'draw'
             return results
 
-        # Nếu có đủ cả 3 lựa chọn -> tất cả hòa
-        if len(choice_counts) == 3:
-            for players in choices.values():
-                for player in players:
-                    results[player] = 'draw'
-            return results
-        
-        # Xác định lựa chọn thắng
         winning_choice = None
         if 'rock' in choice_counts and 'scissors' in choice_counts:
             winning_choice = 'rock'
@@ -129,7 +119,7 @@ class GameServer:
             winning_choice = 'scissors'
         elif 'paper' in choice_counts and 'rock' in choice_counts:
             winning_choice = 'paper'
-        
+
         # Phân bổ kết quả
         for choice, players in choices.items():
             for player in players:
@@ -139,7 +129,7 @@ class GameServer:
                     results[player] = 'draw'
                 else:
                     results[player] = 'lose'
-        
+
         return results
     
     def update_scores(self, room: GameRoom, results: Dict[websockets.WebSocketServerProtocol, str]):
