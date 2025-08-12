@@ -30,7 +30,7 @@ pip install websockets
 
 ```bash
 cd backend
-python sever.py
+python server.py
 ```
 
 Server sẽ chạy tại `ws://localhost:8082`
@@ -175,6 +175,15 @@ GK-nhóm1-kéo/
 1. Chạy server trên máy chủ
 2. Các máy khác kết nối qua IP máy chủ
 3. Thay đổi `localhost` thành IP máy chủ trong `script.js`
+
+### 🔍 Kiểm thử tự động với `pytest`
+
+Cài đặt phụ thuộc và chạy bộ kiểm thử tự động:
+
+```bash
+pip install -r requirements.txt
+pytest
+```
 
 ## 🤝 Đóng góp
 
