@@ -106,10 +106,17 @@ class GameServer:
         
         # Đếm số lượng mỗi lựa chọn
         choice_counts = {choice: len(players) for choice, players in choices.items()}
-        
+
         # Nếu chỉ có 1 loại lựa chọn -> tất cả hòa
         if len(choice_counts) == 1:
             for choice, players in choices.items():
+                for player in players:
+                    results[player] = 'draw'
+            return results
+
+        # Nếu có đủ cả 3 lựa chọn -> tất cả hòa
+        if len(choice_counts) == 3:
+            for players in choices.values():
                 for player in players:
                     results[player] = 'draw'
             return results
@@ -117,14 +124,11 @@ class GameServer:
         # Xác định lựa chọn thắng
         winning_choice = None
         if 'rock' in choice_counts and 'scissors' in choice_counts:
-            if choice_counts['rock'] > 0 and choice_counts['scissors'] > 0:
-                winning_choice = 'rock'
-        if 'scissors' in choice_counts and 'paper' in choice_counts:
-            if choice_counts['scissors'] > 0 and choice_counts['paper'] > 0:
-                winning_choice = 'scissors'
-        if 'paper' in choice_counts and 'rock' in choice_counts:
-            if choice_counts['paper'] > 0 and choice_counts['rock'] > 0:
-                winning_choice = 'paper'
+            winning_choice = 'rock'
+        elif 'scissors' in choice_counts and 'paper' in choice_counts:
+            winning_choice = 'scissors'
+        elif 'paper' in choice_counts and 'rock' in choice_counts:
+            winning_choice = 'paper'
         
         # Phân bổ kết quả
         for choice, players in choices.items():
