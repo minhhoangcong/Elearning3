@@ -176,15 +176,6 @@ GK-nhóm1-kéo/
 2. Các máy khác kết nối qua IP máy chủ
 3. Thay đổi `localhost` thành IP máy chủ trong `script.js`
 
-### 🔍 Kiểm thử tự động với `pytest`
-
-Cài đặt phụ thuộc và chạy bộ kiểm thử tự động:
-
-```bash
-pip install -r requirements.txt
-pytest
-```
-
 ## 🤝 Đóng góp
 
 Nếu bạn muốn đóng góp vào dự án, hãy:

@@ -5,6 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Kéo Búa Bao - Multiplayer Rooms</title>
     <link rel="stylesheet" href="style.css" />
+    <audio id="bgm" src="assets/sounds/bgm.mp3" preload="auto" loop></audio>
+    <audio
+      id="ui-click-sound"
+      src="assets/sounds/ui-click.mp3"
+      preload="auto"
+    ></audio>
+
     <audio
       id="click-sound"
       src="assets/sounds/click.mp3"
@@ -17,6 +24,10 @@
   <body>
     <div class="container">
       <h1>🪨 📄 ✂️ Kéo Búa Bao - Multiplayer</h1>
+      <div class="audio-controls">
+        <button id="bgm-toggle" onclick="toggleBGM()">🎵 Nhạc: Tắt</button>
+        <button id="sfx-toggle" onclick="toggleSFX()">🔔 Hiệu ứng: Bật</button>
+      </div>
 
       <!-- Màn hình chính -->
       <div id="main-screen" class="screen active">

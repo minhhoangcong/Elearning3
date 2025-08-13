@@ -967,3 +967,21 @@ h1 {
   color: #dc3545;
   font-weight: 600;
 } /* đỏ */
+.audio-controls {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin: 10px 0 20px;
+}
+.audio-controls button {
+  padding: 8px 14px;
+  border: none;
+  border-radius: 8px;
+  background: #6c757d;
+  color: #fff;
+  cursor: pointer;
+  font-weight: 600;
+}
+.audio-controls button:hover {
+  background: #545b62;
+}

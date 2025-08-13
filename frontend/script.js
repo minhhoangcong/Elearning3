@@ -12,6 +12,8 @@ let hasChosenThisRound = false;
 let latestRooms = [];
 let pingTimer = null;
 let lastPingTs = 0;
+let bgmEnabled = true; // cho phép nhạc nền
+let sfxEnabled = true; // cho phép hiệu ứng (click, win/lose/draw)
 
 // Khởi tạo kết nối WebSocket
 function initWebSocket() {
@@ -465,6 +467,7 @@ function handleGameResult(data) {
 
 // Thêm helper chung
 function play(tagId) {
+  if (!sfxEnabled) return;
   const el = document.getElementById(tagId);
   if (!el) return;
   try {
@@ -472,30 +475,44 @@ function play(tagId) {
     el.play();
   } catch {}
 }
-/* // Gửi lựa chọn
-function sendChoice(choice) {
-  if (isWaitingForOpponent) {
-    showNotification("Bạn đã chọn rồi, đang chờ người khác...", "info");
-    return;
-  }
 
-  currentChoice = choice;
-  isWaitingForOpponent = true;
-
-  // Hiển thị lựa chọn đã chọn
-  selectChoice(choice);
-
-  // Gửi lựa chọn đến server
-  ws.send(
-    JSON.stringify({
-      type: "choice",
-      choice: choice,
-    })
-  );
-
-  updateGameStatus("Đã chọn! Đang chờ người khác...");
+//Helper phát nhạc nền + toggle
+function startBGMIfNeeded() {
+  const bgm = document.getElementById("bgm");
+  if (!bgm || !bgmEnabled) return;
+  try {
+    bgm.currentTime = 0;
+    bgm.volume = 0.35;
+    bgm.play();
+  } catch {}
 }
- */
+
+function stopBGM() {
+  const bgm = document.getElementById("bgm");
+  if (!bgm) return;
+  try {
+    bgm.pause();
+  } catch {}
+}
+
+function toggleBGM() {
+  bgmEnabled = !bgmEnabled;
+  const btn = document.getElementById("bgm-toggle");
+  if (bgmEnabled) {
+    startBGMIfNeeded();
+    btn.textContent = "🎵 Nhạc: Bật";
+  } else {
+    stopBGM();
+    btn.textContent = "🎵 Nhạc: Tắt";
+  }
+}
+
+function toggleSFX() {
+  sfxEnabled = !sfxEnabled;
+  const btn = document.getElementById("sfx-toggle");
+  btn.textContent = sfxEnabled ? "🔔 Hiệu ứng: Bật" : "🔕 Hiệu ứng: Tắt";
+}
+
 function sendChoice(choice) {
   // Nếu đang chơi với Bot
   if (currentRoom && currentRoom.room_name === "Bạn vs Máy") {
@@ -864,6 +881,29 @@ document.addEventListener("DOMContentLoaded", () => {
       createRoom();
     }
   });
+  document.addEventListener(
+    "click",
+    function onFirstInteraction() {
+      // lần click đầu tiên trên trang -> bắt đầu BGM (đáp ứng autoplay policy)
+      startBGMIfNeeded();
+      document.removeEventListener("click", onFirstInteraction);
+    },
+    { once: true }
+  );
+
+  // Phát click cho mọi button, trừ nút lựa chọn (vì sendChoice đã play click rồi)
+  document.addEventListener("click", (e) => {
+    const btn = e.target.closest("button");
+    if (!btn) return;
+    if (btn.classList.contains("choice-btn")) return; // tránh double
+    play("ui-click-sound");
+  });
+  // Cập nhật nhãn ban đầu
+  const bgmBtn = document.getElementById("bgm-toggle");
+  const sfxBtn = document.getElementById("sfx-toggle");
+  if (bgmBtn) bgmBtn.textContent = bgmEnabled ? "🎵 Nhạc: Bật" : "🎵 Nhạc: Tắt";
+  if (sfxBtn)
+    sfxBtn.textContent = sfxEnabled ? "🔔 Hiệu ứng: Bật" : "🔕 Hiệu ứng: Tắt";
 });
 
 // Bắt đầu chơi với máy (bot)
