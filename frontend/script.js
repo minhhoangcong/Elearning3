@@ -424,7 +424,7 @@ function handleGameResult(data) {
   const { choices, results, scores } = data;
 
   // Hiển thị kết quả
-  const choiceNames = { rock: "Búa 🪨", paper: "Bao 📄", scissors: "Kéo ✂️" };
+  const choiceNames = { rock: "Búa 🪨", paper: "Bao 🤚", scissors: "Kéo ✌️" };
   let resultText = "Kết quả:\n";
   for (const [n, choice] of Object.entries(choices)) {
     resultText += `${n}: ${choiceNames[choice]}\n`;
