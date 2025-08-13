@@ -9,6 +9,9 @@ let isReady = false;
 let countdownInterval = null;
 let timeLeft = 10;
 let hasChosenThisRound = false;
+let latestRooms = [];
+let pingTimer = null;
+let lastPingTs = 0;
 
 // Khởi tạo kết nối WebSocket
 function initWebSocket() {
@@ -18,6 +21,7 @@ function initWebSocket() {
     console.log("Đã kết nối với server");
     showNotification("Đã kết nối với server", "success");
     refreshRooms();
+    startPing();
   };
 
   ws.onmessage = (event) => {
@@ -31,6 +35,7 @@ function initWebSocket() {
       "Mất kết nối với server. Đang thử kết nối lại...",
       "error"
     );
+    stopPing();
     setTimeout(initWebSocket, 3000);
   };
 
@@ -51,7 +56,8 @@ function handleServerMessage(data) {
       break;
 
     case "rooms_list":
-      updateRoomsList(data.rooms);
+      latestRooms = Array.isArray(data.rooms) ? data.rooms : [];
+      updateRoomsList(latestRooms);
       break;
 
     case "room_created":
@@ -130,6 +136,10 @@ function handleServerMessage(data) {
       break;
     case "chat":
       addChatMessage(data.player_name, data.message);
+      break;
+    case "pong":
+      const rtt = Date.now() - (data.t || Date.now());
+      updatePingUI(rtt);
       break;
   }
 }
@@ -395,74 +405,73 @@ function updateRoomInfo(room) {
     disableChoices();
   }
 }
+//helper
+function getMyServerName() {
+  // Ưu tiên tên do server đang giữ cho chính bạn trong phòng
+  if (currentRoom && Array.isArray(currentRoom.players)) {
+    const me = currentRoom.players.find((p) => p.player_id === playerId);
+    if (me)
+      return me.name || me.player_name || playerName || `Player_${playerId}`;
+  }
+  // Dự phòng: nếu chưa có room/players
+  return playerName || `Player_${playerId}`;
+}
 
 // Xử lý kết quả game
 function handleGameResult(data) {
   const { choices, results, scores } = data;
 
-  console.log("Nhận game_result:", data);
-  console.log("Scores nhận được:", scores);
-
   // Hiển thị kết quả
-  const choiceNames = {
-    rock: "Búa 🪨",
-    paper: "Bao 📄",
-    scissors: "Kéo ✂️",
-  };
-
+  const choiceNames = { rock: "Búa 🪨", paper: "Bao 📄", scissors: "Kéo ✂️" };
   let resultText = "Kết quả:\n";
-  for (const [playerName, choice] of Object.entries(choices)) {
-    resultText += `${playerName}: ${choiceNames[choice]}\n`;
+  for (const [n, choice] of Object.entries(choices)) {
+    resultText += `${n}: ${choiceNames[choice]}\n`;
   }
   resultText += "\nKết quả:\n";
-  for (const [playerName, result] of Object.entries(results)) {
-    const resultEmoji =
-      result === "win" ? "🎉" : result === "lose" ? "😔" : "🤝";
-    resultText += `${playerName}: ${resultEmoji} ${getResultText(result)}\n`;
+  for (const [n, r] of Object.entries(results)) {
+    const emoji = r === "win" ? "🎉" : r === "lose" ? "😔" : "🤝";
+    resultText += `${n}: ${emoji} ${getResultText(r)}\n`;
   }
-
   updateGameResult(resultText);
 
-  // Thêm vào lịch sử
+  // Lịch sử
   addToHistory(choices, results);
 
-  // Phát âm thanh tương ứng với kết quả
-  const winSound = document.getElementById("win-sound");
-  const loseSound = document.getElementById("lose-sound");
-  const drawSound = document.getElementById("draw-sound");
+  // 🔊 Phát âm thanh CHỈ theo kết quả của CHÍNH BẠN (tên khớp với server)
+  const meName = getMyServerName();
+  const myResult = results[meName];
+  if (myResult === "win") play("win-sound");
+  else if (myResult === "lose") play("lose-sound");
+  else play("draw-sound");
 
-  // Lặp qua kết quả của từng người chơi và phát âm thanh cho đúng
-  for (const [playerName, result] of Object.entries(results)) {
-    if (result === "win") {
-      winSound.play();
-    } else if (result === "lose") {
-      loseSound.play();
-    } else {
-      drawSound.play();
-    }
-  }
-
-  // Cập nhật bảng điểm với điểm số mới
+  // Cập nhật bảng điểm
   if (currentRoom && scores) {
-    console.log("Cập nhật scores cho currentRoom:", scores);
     currentRoom.scores = scores;
     updateScoreboard(currentRoom);
   }
 
-  // Hiển thị nút chơi lại và ẩn nút sẵn sàng
+  // UI sau khi kết thúc ván
   showNewGameButton();
   hideReadyButton();
 
-  // Reset trạng thái và tắt các nút lựa chọn
   isWaitingForOpponent = false;
   currentChoice = null;
   clearChoiceSelection();
   isReady = false;
-  disableChoices(); // Tắt các nút lựa chọn cho đến khi cả 2 bấm chơi lại
+  disableChoices();
 
   updateGameStatus("Trận đấu kết thúc! Bấm 'Chơi lại' để bắt đầu vòng mới");
 }
 
+// Thêm helper chung
+function play(tagId) {
+  const el = document.getElementById(tagId);
+  if (!el) return;
+  try {
+    el.currentTime = 0;
+    el.play();
+  } catch {}
+}
 /* // Gửi lựa chọn
 function sendChoice(choice) {
   if (isWaitingForOpponent) {
@@ -490,44 +499,34 @@ function sendChoice(choice) {
 function sendChoice(choice) {
   // Nếu đang chơi với Bot
   if (currentRoom && currentRoom.room_name === "Bạn vs Máy") {
+    const me = effectivePlayerName();
     currentChoice = choice;
     selectChoice(choice);
 
-    // Bot chọn random
     const botChoices = ["rock", "paper", "scissors"];
     const botChoice = botChoices[Math.floor(Math.random() * 3)];
 
-    // So sánh kết quả
     const result = getResultAgainstBot(choice, botChoice);
     const results = {
-      [playerName]: result,
+      [me]: result,
       Bot: result === "win" ? "lose" : result === "lose" ? "win" : "draw",
     };
+    const choices = { [me]: choice, Bot: botChoice };
 
-    const choices = {
-      [playerName]: choice,
-      Bot: botChoice,
-    };
-
-    // Thêm vào lịch sử
     addToHistory(choices, results);
 
-    // Cập nhật điểm số
     if (result === "win") {
-      currentRoom.scores[playerName].wins += 1;
+      currentRoom.scores[me].wins += 1;
       currentRoom.scores["Bot"].losses += 1;
     } else if (result === "lose") {
-      currentRoom.scores[playerName].losses += 1;
+      currentRoom.scores[me].losses += 1;
       currentRoom.scores["Bot"].wins += 1;
     } else {
-      currentRoom.scores[playerName].draws += 1;
+      currentRoom.scores[me].draws += 1;
       currentRoom.scores["Bot"].draws += 1;
     }
 
-    // 🎯 Cập nhật bảng điểm ngay lập tức
     updateScoreboard(currentRoom);
-
-    // Hiển thị kết quả
     updateGameResult(
       `Bạn chọn ${getChoiceText(choice)} - Bot chọn ${getChoiceText(botChoice)}`
     );
@@ -537,19 +536,15 @@ function sendChoice(choice) {
     return;
   }
 
-  // Nếu chơi với người thật (giữ nguyên logic cũ)
+  // Nếu chơi với người thật
   if (isWaitingForOpponent) {
     showNotification("Bạn đã chọn rồi, đang chờ người khác...", "info");
     return;
   }
-  // Phát âm thanh khi người chơi chọn
-  const clickSound = document.getElementById("click-sound");
 
-  // Đảm bảo âm thanh được phát ngay lập tức
-  clickSound.play().catch(function (error) {
-    console.log("Lỗi khi phát âm thanh:", error);
-  });
-  playSound("click-sound");
+  // Âm click
+  play("click-sound");
+
   currentChoice = choice;
   isWaitingForOpponent = true;
 
@@ -557,33 +552,16 @@ function sendChoice(choice) {
   hasChosenThisRound = true;
   clearCountdownTimer();
 
-  ws.send(
-    JSON.stringify({
-      type: "choice",
-      choice: choice,
-    })
-  );
+  // Khóa nút tránh spam
+  document
+    .querySelectorAll(".choice-btn")
+    .forEach((btn) => (btn.disabled = true));
+
+  ws.send(JSON.stringify({ type: "choice", choice }));
 
   updateGameStatus("Đã chọn! Đang chờ người khác...");
 }
-const audioContext = new (window.AudioContext || window.webkitAudioContext)();
 
-function playSound(soundId) {
-  const sound = document.getElementById(soundId);
-  const audioSource = audioContext.createBufferSource();
-  const request = new XMLHttpRequest();
-  request.open("GET", sound.src, true);
-  request.responseType = "arraybuffer";
-
-  request.onload = function () {
-    audioContext.decodeAudioData(request.response, function (buffer) {
-      audioSource.buffer = buffer;
-      audioSource.connect(audioContext.destination);
-      audioSource.start(0);
-    });
-  };
-  request.send();
-}
 // Cập nhật bảng điểm
 function updateScoreboard(room) {
   const scoreboard = document.getElementById("scoreboard");
@@ -890,23 +868,19 @@ document.addEventListener("DOMContentLoaded", () => {
 
 // Bắt đầu chơi với máy (bot)
 function startVsBot() {
+  const me = effectivePlayerName();
   currentRoom = {
     room_name: "Bạn vs Máy",
     players: [
-      {
-        name: playerName || `Người chơi ${playerId}`,
-        ready: true,
-        player_id: playerId,
-      },
+      { name: me, ready: true, player_id: playerId },
       { name: "Bot", ready: true, player_id: -1 },
     ],
     game_state: "playing",
     scores: {
-      [playerName]: { wins: 0, losses: 0, draws: 0 },
+      [me]: { wins: 0, losses: 0, draws: 0 },
       Bot: { wins: 0, losses: 0, draws: 0 },
     },
   };
-
   showGameRoom();
   enableChoices();
   updateGameStatus("Chọn Kéo/Búa/Bao để đấu với máy.");
@@ -942,8 +916,8 @@ function addChatMessage(sender, message) {
   const chatBox = document.getElementById("chat-messages");
   if (!chatBox) return;
 
-  // So sánh sender với playerName toàn cục để xác định có phải tin nhắn của mình không
-  const isMe = sender === playerName;
+  const me = getMyServerName();
+  const isMe = sender === me;
   const nameDisplay = isMe ? "Bạn" : sender;
 
   let cls = "chat-message";
@@ -956,6 +930,7 @@ function addChatMessage(sender, message) {
   chatBox.appendChild(div);
   chatBox.scrollTop = chatBox.scrollHeight;
 }
+
 //thêm giới hạn thời gian
 function startCountdownTimer(duration = 10) {
   clearCountdownTimer();
@@ -991,4 +966,62 @@ function clearCountdownTimer() {
     countdownInterval = null;
   }
   document.getElementById("countdown-timer").style.display = "none";
+}
+function effectivePlayerName() {
+  return (playerName && playerName.trim()) || `Người chơi ${playerId}`;
+}
+
+//Thêm hàm quickPlay
+function quickPlay() {
+  // Dùng danh sách đã có ngay nếu sẵn
+  const rooms = Array.isArray(latestRooms) ? latestRooms : [];
+
+  // Ưu tiên phòng còn slot (chưa đủ 2) và đang ở trạng thái “waiting”
+  const candidates = rooms
+    .filter((r) => Number(r.current_players) < 2)
+    .sort((a, b) => {
+      // waiting lên trước playing/finished (an toàn)
+      const rank = (s) => (s === "waiting" ? 0 : s === "playing" ? 1 : 2);
+      return rank(a.game_state) - rank(b.game_state);
+    });
+
+  if (candidates.length > 0) {
+    // Thử join phòng đầu tiên phù hợp
+    joinRoom(candidates[0].room_id);
+    return;
+  }
+
+  // Không có phòng phù hợp -> tạo phòng mới
+  document.getElementById("room-name").value = `Phòng ${Date.now()}`;
+  createRoom();
+}
+//Hàm ping
+function updatePingUI(rtt) {
+  const el = document.getElementById("ping-value");
+  if (!el) return;
+  el.textContent = rtt > 0 ? rtt : "--";
+
+  el.classList.remove("ping-good", "ping-ok", "ping-bad");
+  if (rtt <= 0) return;
+  if (rtt < 60) el.classList.add("ping-good");
+  else if (rtt < 150) el.classList.add("ping-ok");
+  else el.classList.add("ping-bad");
+}
+function startPing() {
+  if (pingTimer) return;
+  const tick = () => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    lastPingTs = Date.now();
+    ws.send(JSON.stringify({ type: "ping", t: lastPingTs }));
+  };
+  tick(); // gửi ngay 1 cái
+  pingTimer = setInterval(tick, 5000);
+}
+
+function stopPing() {
+  if (pingTimer) {
+    clearInterval(pingTimer);
+    pingTimer = null;
+  }
+  updatePingUI(0);
 }
