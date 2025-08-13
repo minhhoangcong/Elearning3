@@ -6,6 +6,7 @@ let gameHistory = [];
 let isWaitingForOpponent = false;
 let currentChoice = null;
 let isReady = false;
+let isBotMode = false;
 let countdownInterval = null;
 let timeLeft = 10;
 let hasChosenThisRound = false;
@@ -103,6 +104,7 @@ function handleServerMessage(data) {
       }
       hideNewGameButton(); // Ẩn nút chơi lại khi game bắt đầu
       hideReadyButton(); // Ẩn nút sẵn sàng khi game bắt đầu
+      stopBGM();
       showNotification("Trò chơi bắt đầu!", "success");
       break;
 
@@ -240,7 +242,9 @@ function leaveRoom() {
   );
 
   currentRoom = null;
+  isBotMode = false;
   showMainScreen();
+  startBGMIfNeeded(); // 🔊 Về menu thì bật lại nhạc (nếu đang Bật)
   showNotification("Đã rời phòng", "info");
   refreshRooms(); // Làm mới danh sách phòng
 }
@@ -274,11 +278,26 @@ function toggleReady() {
   if (isReady) {
     readyBtn.textContent = "⏸️ Hủy sẵn sàng";
     readyBtn.classList.add("ready");
+
+    if (isBotMode) {
+      // Bắt đầu ván với Bot
+      currentRoom.game_state = "playing";
+      currentRoom.players.forEach((p) => (p.ready = true));
+      updateRoomInfo(currentRoom); // update UI ready badges
+
+      hideReadyButton();
+      enableChoices();
+      startCountdownTimer(10); // nếu muốn đếm ngược như PvP
+      updateGameStatus("Trò chơi bắt đầu! Hãy chọn Kéo/Búa/Bao.");
+      return; // KHÔNG gửi ws.ready khi chơi Bot
+    }
+
+    // PvP
     ws.send(JSON.stringify({ type: "ready" }));
   } else {
     readyBtn.textContent = "✅ Sẵn sàng";
     readyBtn.classList.remove("ready");
-    // Gửi yêu cầu hủy sẵn sàng (có thể thêm logic này vào server)
+    // (PvP có thể thêm ws 'unready' sau, tùy server)
   }
 }
 
@@ -463,6 +482,8 @@ function handleGameResult(data) {
   disableChoices();
 
   updateGameStatus("Trận đấu kết thúc! Bấm 'Chơi lại' để bắt đầu vòng mới");
+  // 🔊 BẬT lại nhạc nền ở màn hình chờ sau trận
+  startBGMIfNeeded();
 }
 
 // Thêm helper chung
@@ -514,23 +535,42 @@ function toggleSFX() {
 }
 
 function sendChoice(choice) {
-  // Nếu đang chơi với Bot
+  // --- Chế độ đấu với Bot ---
   if (currentRoom && currentRoom.room_name === "Bạn vs Máy") {
-    const me = effectivePlayerName();
+    // Chỉ cho chọn khi đang ở trạng thái 'playing'
+    if (!currentRoom || currentRoom.game_state !== "playing") {
+      showNotification("Bấm 'Chơi lại' để bắt đầu ván mới với Bot.", "info");
+      return;
+    }
+    // Khóa anti-spam trong vòng hiện tại
+    if (hasChosenThisRound) return;
+    hasChosenThisRound = true;
+
+    // Hiệu ứng click (nếu đang bật SFX)
+    play("click-sound");
+
     currentChoice = choice;
     selectChoice(choice);
+    disableChoices(); // khóa nút ngay khi chọn
 
+    // Bot random
     const botChoices = ["rock", "paper", "scissors"];
     const botChoice = botChoices[Math.floor(Math.random() * 3)];
 
+    // Tính kết quả
     const result = getResultAgainstBot(choice, botChoice);
+    const me = effectivePlayerName();
     const results = {
       [me]: result,
       Bot: result === "win" ? "lose" : result === "lose" ? "win" : "draw",
     };
     const choices = { [me]: choice, Bot: botChoice };
 
-    addToHistory(choices, results);
+    // Cập nhật bảng điểm cục bộ
+    if (!currentRoom.scores[me])
+      currentRoom.scores[me] = { wins: 0, losses: 0, draws: 0 };
+    if (!currentRoom.scores["Bot"])
+      currentRoom.scores["Bot"] = { wins: 0, losses: 0, draws: 0 };
 
     if (result === "win") {
       currentRoom.scores[me].wins += 1;
@@ -543,25 +583,35 @@ function sendChoice(choice) {
       currentRoom.scores["Bot"].draws += 1;
     }
 
-    updateScoreboard(currentRoom);
+    // Hiển thị kết quả + lịch sử
+    const getChoiceText = (c) =>
+      c === "rock" ? "Búa 🪨" : c === "paper" ? "Bao 📄" : "Kéo ✂️";
     updateGameResult(
       `Bạn chọn ${getChoiceText(choice)} - Bot chọn ${getChoiceText(botChoice)}`
     );
-    showNewGameButton();
-    disableChoices();
-    updateGameStatus("Kết thúc trận. Bấm 'Chơi lại'");
+    addToHistory(choices, results);
+    updateScoreboard(currentRoom);
+
+    // Phát âm thanh theo kết quả của chính bạn
+    if (result === "win") play("win-sound");
+    else if (result === "lose") play("lose-sound");
+    else play("draw-sound");
+
+    // Kết thúc ván
+    clearCountdownTimer();
+    currentRoom.game_state = "finished";
+    showNewGameButton(); // hiển thị nút Chơi lại
+    updateGameStatus("Trận đấu kết thúc! Bấm 'Chơi lại' để bắt đầu ván mới");
     return;
   }
 
-  // Nếu chơi với người thật
+  // --- Phần chơi với người (giữ nguyên như cũ) ---
   if (isWaitingForOpponent) {
     showNotification("Bạn đã chọn rồi, đang chờ người khác...", "info");
     return;
   }
 
-  // Âm click
   play("click-sound");
-
   currentChoice = choice;
   isWaitingForOpponent = true;
 
@@ -569,13 +619,7 @@ function sendChoice(choice) {
   hasChosenThisRound = true;
   clearCountdownTimer();
 
-  // Khóa nút tránh spam
-  document
-    .querySelectorAll(".choice-btn")
-    .forEach((btn) => (btn.disabled = true));
-
   ws.send(JSON.stringify({ type: "choice", choice }));
-
   updateGameStatus("Đã chọn! Đang chờ người khác...");
 }
 
@@ -675,35 +719,23 @@ function updateScoreboard(room) {
   scoreboard.innerHTML = scoreboardHTML;
 }
 
-// Yêu cầu game mới
-/* function requestNewGame() {
-  ws.send(
-    JSON.stringify({
-      type: "new_game",
-    })
-  );
-
-  updateGameStatus("Đang chờ người chơi khác bấm 'Chơi lại'...");
-  hideNewGameButton();
-  clearChoiceSelection();
-  disableChoices(); // Không cho chọn lựa chọn cho đến khi cả 2 bấm chơi lại
-} */
 function requestNewGame() {
   if (currentRoom && currentRoom.room_name === "Bạn vs Máy") {
+    // Reset vòng mới cho Bot mode
+    hasChosenThisRound = false;
+    currentChoice = null;
     clearChoiceSelection();
-    enableChoices();
+    currentRoom.game_state = "playing"; // chuyển về playing
+    hideNewGameButton(); // ẩn nút Chơi lại
+    enableChoices(); // mở lại các nút
+    updateGameResult(""); // xóa dòng kết quả cũ
     updateGameStatus("Chọn Kéo/Búa/Bao để đấu với máy.");
-    hideNewGameButton();
     return;
   }
 
-  ws.send(
-    JSON.stringify({
-      type: "new_game",
-    })
-  );
-
-  updateGameStatus("Đang chờ người chơi khác bấm 'Chơi lại'...");
+  // Giữ nguyên cho chế độ người-với-người
+  ws.send(JSON.stringify({ type: "new_game" }));
+  updateGameStatus("Đang chờ người chơi khác bấm 'Chơi lại'.");
   hideNewGameButton();
   clearChoiceSelection();
   disableChoices();
@@ -909,21 +941,32 @@ document.addEventListener("DOMContentLoaded", () => {
 // Bắt đầu chơi với máy (bot)
 function startVsBot() {
   const me = effectivePlayerName();
+  isBotMode = true;
   currentRoom = {
     room_name: "Bạn vs Máy",
     players: [
-      { name: me, ready: true, player_id: playerId },
-      { name: "Bot", ready: true, player_id: -1 },
+      { name: me, ready: false, player_id: playerId },
+      { name: "Bot", ready: false, player_id: -1 },
     ],
-    game_state: "playing",
+    game_state: "waiting", // ban đầu CHƯA chơi
     scores: {
-      [me]: { wins: 0, losses: 0, draws: 0 },
-      Bot: { wins: 0, losses: 0, draws: 0 },
+      [me]:
+        currentRoom?.scores?.[me]?.wins !== undefined
+          ? currentRoom.scores[me]
+          : { wins: 0, losses: 0, draws: 0 },
+      Bot:
+        currentRoom?.scores?.Bot?.wins !== undefined
+          ? currentRoom.scores.Bot
+          : { wins: 0, losses: 0, draws: 0 },
     },
   };
+
   showGameRoom();
-  enableChoices();
-  updateGameStatus("Chọn Kéo/Búa/Bao để đấu với máy.");
+  showReadyButton(); // cần bấm Sẵn sàng
+  disableChoices(); // chưa được chọn khi chưa start
+  updateGameStatus("Bấm 'Sẵn sàng' để bắt đầu ván với Bot.");
+  stopBGM(); // bạn đang dùng kiểu “vào trận tắt nhạc”
+  hideNewGameButton(); // tránh dính nút từ ván trước
 }
 
 // Hàm xử lý kết quả khi chơi với bot
