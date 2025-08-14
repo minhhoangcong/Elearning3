@@ -7,6 +7,9 @@ let isWaitingForOpponent = false;
 let currentChoice = null;
 let isReady = false;
 let isBotMode = false;
+let botSeriesBestOf = 3; // Bo3
+let botSeriesWins = { me: 0, bot: 0 };
+let botSeriesOver = false;
 let countdownInterval = null;
 let timeLeft = 10;
 let hasChosenThisRound = false;
@@ -15,6 +18,7 @@ let pingTimer = null;
 let lastPingTs = 0;
 let bgmEnabled = true; // cho phép nhạc nền
 let sfxEnabled = true; // cho phép hiệu ứng (click, win/lose/draw)
+let lastPvpSeries = null; // nhớ series PvP mới nhất để render lại khi cần
 
 // Khởi tạo kết nối WebSocket
 function initWebSocket() {
@@ -91,30 +95,59 @@ function handleServerMessage(data) {
       showNotification(`${data.player_name} đã sẵn sàng`, "info");
       break;
 
-    case "game_start":
-      currentRoom = data.room;
-      updateRoomInfo(data.room);
-      updateGameStatus("Trò chơi bắt đầu! Chọn lựa của bạn:");
-      // Chỉ bật các nút lựa chọn nếu đây là ván đầu tiên hoặc cả 2 đã bấm chơi lại
-      if (data.is_first_game || data.both_ready) {
-        enableChoices();
-        startCountdownTimer(10);
-      } else {
-        disableChoices(); // Không cho chọn cho đến khi cả 2 bấm chơi lại
+    case "game_start": {
+      const { room, series } = data;
+      currentRoom = room;
+      updateRoomInfo(room);
+      clearChoiceSelection();
+      hideNewGameButton();
+      hideReadyButton(); // vào ván thì ẩn Ready
+      enableChoices();
+      isWaitingForOpponent = false;
+      updateGameStatus("Trò chơi bắt đầu! Hãy chọn kéo/búa/bao.");
+
+      try {
+        stopBGM && stopBGM();
+      } catch {}
+
+      // 🕒 Đếm ngược 10s
+      startCountdownTimer(10);
+
+      // 🔥 Bo3 PvP: nếu server gửi series thì lưu + hiển thị
+      if (!isBotMode && series) {
+        lastPvpSeries = series;
+        updateSeriesUIPvp(series);
+      } else if (!isBotMode && lastPvpSeries) {
+        // phòng hờ: nếu vì lý do gì game_start chưa kèm series,
+        // ta vẫn hiển thị lại series gần nhất để không "mất" dòng Bo3
+        updateSeriesUIPvp(lastPvpSeries);
       }
-      hideNewGameButton(); // Ẩn nút chơi lại khi game bắt đầu
-      hideReadyButton(); // Ẩn nút sẵn sàng khi game bắt đầu
-      stopBGM();
+
       showNotification("Trò chơi bắt đầu!", "success");
       break;
+    }
 
     case "player_chose":
       updateGameStatus(`${data.player_name} đã chọn lựa`);
       break;
 
-    case "game_result":
+    case "game_result": {
+      // Dừng đồng hồ + hiển thị kết quả, điểm... (hàm cũ của bạn)
       handleGameResult(data);
+
+      // 🔥 Cập nhật Bo3 PvP chắc chắn theo payload từ server
+      if (!isBotMode && data.series) {
+        lastPvpSeries = data.series;
+        updateSeriesUIPvp(data.series);
+        const btn = document.getElementById("new-game-btn");
+        if (btn) {
+          btn.textContent = data.series.over
+            ? "🔄 Bắt đầu series mới"
+            : "🔄 Chơi lại (vòng kế)";
+        }
+      }
       break;
+    }
 
     case "player_ready_for_new_game":
       currentRoom = data.room;
@@ -235,6 +268,8 @@ function joinRoom(roomId) {
 
 // Rời phòng
 function leaveRoom() {
+  const box = document.getElementById("series-status");
+  if (box) box.style.display = "none";
   ws.send(
     JSON.stringify({
       type: "leave_room",
@@ -280,24 +315,21 @@ function toggleReady() {
     readyBtn.classList.add("ready");
 
     if (isBotMode) {
-      // Bắt đầu ván với Bot
       currentRoom.game_state = "playing";
       currentRoom.players.forEach((p) => (p.ready = true));
-      updateRoomInfo(currentRoom); // update UI ready badges
+      updateRoomInfo(currentRoom);
 
       hideReadyButton();
       enableChoices();
-      startCountdownTimer(10); // nếu muốn đếm ngược như PvP
+      startCountdownTimer(10); // nếu bạn muốn đếm ngược như PvP
       updateGameStatus("Trò chơi bắt đầu! Hãy chọn Kéo/Búa/Bao.");
-      return; // KHÔNG gửi ws.ready khi chơi Bot
+      return;
     }
-
     // PvP
     ws.send(JSON.stringify({ type: "ready" }));
   } else {
     readyBtn.textContent = "✅ Sẵn sàng";
     readyBtn.classList.remove("ready");
-    // (PvP có thể thêm ws 'unready' sau, tùy server)
   }
 }
 
@@ -333,6 +365,7 @@ function showGameRoom() {
 
 // Cập nhật thông tin phòng
 function updateRoomInfo(room) {
+  if (!isBotMode && lastPvpSeries) updateSeriesUIPvp(lastPvpSeries);
   if (!room) return;
 
   currentRoom = room;
@@ -440,6 +473,7 @@ function getMyServerName() {
 
 // Xử lý kết quả game
 function handleGameResult(data) {
+  clearCountdownTimer(); // dừng đồng hồ khi có kết quả
   const { choices, results, scores } = data;
 
   // Hiển thị kết quả
@@ -535,82 +569,107 @@ function toggleSFX() {
 }
 
 function sendChoice(choice) {
-  // --- Chế độ đấu với Bot ---
+  // --- BOT MODE ---
   if (currentRoom && currentRoom.room_name === "Bạn vs Máy") {
     // Chỉ cho chọn khi đang ở trạng thái 'playing'
     if (!currentRoom || currentRoom.game_state !== "playing") {
       showNotification("Bấm 'Chơi lại' để bắt đầu ván mới với Bot.", "info");
       return;
     }
-    // Khóa anti-spam trong vòng hiện tại
+    // Chống spam click nhiều lần trong ván
     if (hasChosenThisRound) return;
     hasChosenThisRound = true;
 
-    // Hiệu ứng click (nếu đang bật SFX)
+    // SFX click chọn
     play("click-sound");
 
+    const me = effectivePlayerName();
     currentChoice = choice;
     selectChoice(choice);
-    disableChoices(); // khóa nút ngay khi chọn
+    disableChoices(); // khóa nút ngay khi đã chọn
 
-    // Bot random
+    // Bot chọn ngẫu nhiên
     const botChoices = ["rock", "paper", "scissors"];
     const botChoice = botChoices[Math.floor(Math.random() * 3)];
 
     // Tính kết quả
     const result = getResultAgainstBot(choice, botChoice);
-    const me = effectivePlayerName();
     const results = {
       [me]: result,
       Bot: result === "win" ? "lose" : result === "lose" ? "win" : "draw",
     };
     const choices = { [me]: choice, Bot: botChoice };
 
-    // Cập nhật bảng điểm cục bộ
+    // Lịch sử + điểm tích lũy (scores màn hình)
+    addToHistory(choices, results);
     if (!currentRoom.scores[me])
       currentRoom.scores[me] = { wins: 0, losses: 0, draws: 0 };
     if (!currentRoom.scores["Bot"])
       currentRoom.scores["Bot"] = { wins: 0, losses: 0, draws: 0 };
-
     if (result === "win") {
-      currentRoom.scores[me].wins += 1;
-      currentRoom.scores["Bot"].losses += 1;
+      currentRoom.scores[me].wins++;
+      currentRoom.scores.Bot.losses++;
     } else if (result === "lose") {
-      currentRoom.scores[me].losses += 1;
-      currentRoom.scores["Bot"].wins += 1;
+      currentRoom.scores[me].losses++;
+      currentRoom.scores.Bot.wins++;
     } else {
-      currentRoom.scores[me].draws += 1;
-      currentRoom.scores["Bot"].draws += 1;
+      currentRoom.scores[me].draws++;
+      currentRoom.scores.Bot.draws++;
     }
+    updateScoreboard(currentRoom);
 
-    // Hiển thị kết quả + lịch sử
+    // Hiển thị kết quả một ván
     const getChoiceText = (c) =>
       c === "rock" ? "Búa 🪨" : c === "paper" ? "Bao 📄" : "Kéo ✂️";
     updateGameResult(
       `Bạn chọn ${getChoiceText(choice)} - Bot chọn ${getChoiceText(botChoice)}`
     );
-    addToHistory(choices, results);
-    updateScoreboard(currentRoom);
 
-    // Phát âm thanh theo kết quả của chính bạn
+    // Phát âm theo KẾT QUẢ của bạn
     if (result === "win") play("win-sound");
     else if (result === "lose") play("lose-sound");
     else play("draw-sound");
 
-    // Kết thúc ván
+    // --- CẬP NHẬT SERIES (Bo3) ---
+    if (result === "win") botSeriesWins.me++;
+    else if (result === "lose") botSeriesWins.bot++;
+    // Hòa thì seriesWins không đổi
+    updateSeriesUIBot();
+
+    const target = Math.ceil(botSeriesBestOf / 2); // Bo3 -> 2, Bo5 -> 3
     clearCountdownTimer();
     currentRoom.game_state = "finished";
-    showNewGameButton(); // hiển thị nút Chơi lại
-    updateGameStatus("Trận đấu kết thúc! Bấm 'Chơi lại' để bắt đầu ván mới");
+
+    showNewGameButton(); // hiện nút Chơi lại
+
+    if (botSeriesWins.me >= target || botSeriesWins.bot >= target) {
+      // SERIES KẾT THÚC
+      botSeriesOver = true;
+      updateGameStatus(
+        botSeriesWins.me > botSeriesWins.bot
+          ? `Bạn thắng series Bo${botSeriesBestOf}! Bấm 'Chơi lại' để bắt đầu series mới.`
+          : `Bot thắng series Bo${botSeriesBestOf}! Bấm 'Chơi lại' để bắt đầu series mới.`
+      );
+      // Đổi nhãn nút cho dễ hiểu (tùy bạn)
+      const btn = document.getElementById("new-game-btn");
+      if (btn) btn.textContent = "🔄 Bắt đầu series mới";
+    } else {
+      // CÒN VÁN TIẾP THEO
+      botSeriesOver = false;
+      updateGameStatus(
+        `Ván tiếp theo trong series Bo${botSeriesBestOf}: bấm 'Chơi lại'.`
+      );
+      const btn = document.getElementById("new-game-btn");
+      if (btn) btn.textContent = "🔄 Chơi lại (vòng kế)";
+    }
     return;
   }
 
-  // --- Phần chơi với người (giữ nguyên như cũ) ---
+  // --- PVP (giữ nguyên như bạn đang có) ---
   if (isWaitingForOpponent) {
     showNotification("Bạn đã chọn rồi, đang chờ người khác...", "info");
     return;
   }
-
   play("click-sound");
   currentChoice = choice;
   isWaitingForOpponent = true;
@@ -720,20 +779,40 @@ function updateScoreboard(room) {
 }
 
 function requestNewGame() {
+  // BOT MODE
   if (currentRoom && currentRoom.room_name === "Bạn vs Máy") {
-    // Reset vòng mới cho Bot mode
-    hasChosenThisRound = false;
-    currentChoice = null;
+    clearCountdownTimer();
     clearChoiceSelection();
-    currentRoom.game_state = "playing"; // chuyển về playing
-    hideNewGameButton(); // ẩn nút Chơi lại
-    enableChoices(); // mở lại các nút
-    updateGameResult(""); // xóa dòng kết quả cũ
-    updateGameStatus("Chọn Kéo/Búa/Bao để đấu với máy.");
+    hideNewGameButton();
+
+    if (botSeriesOver) {
+      // BẮT ĐẦU SERIES MỚI
+      botSeriesWins = { me: 0, bot: 0 };
+      botSeriesOver = false;
+      updateSeriesUIBot();
+      updateGameResult("");
+      updateGameStatus("Bấm 'Sẵn sàng' để bắt đầu series mới với Bot.");
+      // Trở lại trạng thái chờ
+      currentRoom.game_state = "waiting";
+      currentRoom.players.forEach((p) => (p.ready = false));
+      showReadyButton();
+      disableChoices();
+    } else {
+      // VÁN TIẾP THEO TRONG SERIES
+      currentRoom.game_state = "playing";
+      hasChosenThisRound = false;
+      currentChoice = null;
+      updateGameResult("");
+      updateGameStatus(
+        `Bo${botSeriesBestOf} — Ván kế tiếp: hãy chọn Kéo/Búa/Bao.`
+      );
+      enableChoices();
+      startCountdownTimer(10);
+    }
     return;
   }
 
-  // Giữ nguyên cho chế độ người-với-người
+  // PVP
   ws.send(JSON.stringify({ type: "new_game" }));
   updateGameStatus("Đang chờ người chơi khác bấm 'Chơi lại'.");
   hideNewGameButton();
@@ -942,31 +1021,32 @@ document.addEventListener("DOMContentLoaded", () => {
 function startVsBot() {
   const me = effectivePlayerName();
   isBotMode = true;
+
+  // Reset series mỗi khi vào Bot (nếu muốn giữ điểm qua nhiều series, bỏ 3 dòng dưới)
+  botSeriesBestOf = 3; // có thể đổi 5 sau
+  botSeriesWins = { me: 0, bot: 0 };
+  botSeriesOver = false;
+
   currentRoom = {
     room_name: "Bạn vs Máy",
     players: [
       { name: me, ready: false, player_id: playerId },
       { name: "Bot", ready: false, player_id: -1 },
     ],
-    game_state: "waiting", // ban đầu CHƯA chơi
+    game_state: "waiting",
     scores: {
-      [me]:
-        currentRoom?.scores?.[me]?.wins !== undefined
-          ? currentRoom.scores[me]
-          : { wins: 0, losses: 0, draws: 0 },
-      Bot:
-        currentRoom?.scores?.Bot?.wins !== undefined
-          ? currentRoom.scores.Bot
-          : { wins: 0, losses: 0, draws: 0 },
+      [me]: currentRoom?.scores?.[me] ?? { wins: 0, losses: 0, draws: 0 },
+      Bot: currentRoom?.scores?.Bot ?? { wins: 0, losses: 0, draws: 0 },
     },
   };
 
   showGameRoom();
-  showReadyButton(); // cần bấm Sẵn sàng
-  disableChoices(); // chưa được chọn khi chưa start
+  hideNewGameButton(); // tránh dính trạng thái cũ
+  showReadyButton(); // có Sẵn sàng giống PvP
+  disableChoices();
   updateGameStatus("Bấm 'Sẵn sàng' để bắt đầu ván với Bot.");
-  stopBGM(); // bạn đang dùng kiểu “vào trận tắt nhạc”
-  hideNewGameButton(); // tránh dính nút từ ván trước
+  updateSeriesUIBot(); // hiện Bo3: 0—0
+  stopBGM(); // nếu bạn đang để vào trận tắt nhạc
 }
 
 // Hàm xử lý kết quả khi chơi với bot
@@ -1107,4 +1187,66 @@ function stopPing() {
     pingTimer = null;
   }
   updatePingUI(0);
+}
+//Cập nhật chức năng bot
+function updateSeriesUIBot() {
+  const el = document.getElementById("series-status");
+  if (!el) return;
+  const me = effectivePlayerName();
+  el.style.display = "block";
+  el.textContent = `Bo${botSeriesBestOf}: ${me} ${botSeriesWins.me} — ${botSeriesWins.bot} Bot`;
+}
+
+// ==== Bo3 UI cho PvP (bản chắc kèo) ====
+function updateSeriesUIPvp(series) {
+  // Bỏ qua nếu đang ở Bot mode
+  if (typeof isBotMode !== "undefined" && isBotMode) return;
+
+  const box = document.getElementById("series-status");
+  if (!box) return;
+
+  // Phòng hờ: chưa có room/players -> ẩn
+  if (
+    !currentRoom ||
+    !Array.isArray(currentRoom.players) ||
+    currentRoom.players.length < 1
+  ) {
+    box.style.display = "none";
+    return;
+  }
+
+  const bo = (series && series.best_of) || 3;
+  const wins = (series && series.wins) || {};
+
+  // Map id -> name để tra thẳng theo id trong 'wins'
+  const byId = {};
+  for (const p of currentRoom.players) {
+    if (p && typeof p.player_id !== "undefined") {
+      byId[String(p.player_id)] =
+        p.name || p.player_name || `Player_${p.player_id}`;
+    }
+  }
+
+  // Xác định "mình" & "đối thủ" theo playerId thật
+  const meId = String(playerId);
+  const meName = byId[meId] || `Player_${playerId}`;
+
+  // Tìm id đối thủ từ danh sách players (khác playerId của mình)
+  let oppId = null;
+  for (const p of currentRoom.players) {
+    if (p && String(p.player_id) !== meId) {
+      oppId = String(p.player_id);
+      break;
+    }
+  }
+  const oppName = (oppId && byId[oppId]) || "Đối thủ";
+
+  // Lấy điểm theo id (chịu cả trường hợp key là "1" hoặc 1)
+  const getW = (id) => wins[String(id)] ?? wins[id] ?? 0;
+  const wMe = getW(meId);
+  const wOpp = oppId ? getW(oppId) : 0;
+
+  // Nếu thiếu id đối thủ (hi hữu) thì vẫn hiển thị mình 0—0 để không “mất dòng”
+  box.style.display = "block";
+  box.textContent = `Bo${bo}: ${meName} ${wMe} — ${wOpp} ${oppName}`;
 }
