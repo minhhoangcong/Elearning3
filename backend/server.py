@@ -3,10 +3,11 @@ import websockets
 import json
 import random
 import uuid
+import hashlib
 from typing import Dict, List, Set
 
 class GameRoom:
-    def __init__(self, room_id: str, room_name: str, max_players: int = 2):
+    def __init__(self, room_id: str, room_name: str, max_players: int = 2, password_hash: str | None = None):
         self.room_id = room_id
         self.room_name = room_name
         self.max_players = max_players
@@ -19,6 +20,7 @@ class GameRoom:
         self.series_best_of = 3          # Bo3
         self.series_wins = {}            # map: websocket -> số ván thắng trong series hiện tại
         self.series_over = False         # đã kết thúc series hay chưa
+        self.password_hash = password_hash
 
     def add_player(self, player: websockets.WebSocketServerProtocol, player_name: str):
         if len(self.players) < self.max_players:
@@ -53,7 +55,8 @@ class GameRoom:
             'current_players': len(self.players),
             'game_state': self.game_state,
             'players': [{'name': self.scores[p]['name'], 'ready': p in self.ready_players} for p in self.players],
-            'scores': {self.scores[p]['name']: {'wins': self.scores[p]['wins'], 'losses': self.scores[p]['losses'], 'draws': self.scores[p]['draws']} for p in self.players}
+            'scores': {self.scores[p]['name']: {'wins': self.scores[p]['wins'], 'losses': self.scores[p]['losses'], 'draws': self.scores[p]['draws']} for p in self.players},
+            'has_password': bool(self.password_hash)
         }
 
 class GameServer:
@@ -66,10 +69,12 @@ class GameServer:
         self.player_counter += 1
         return self.player_counter
     
-    def create_room(self, room_name: str, max_players: int = 2) -> str:
+    def create_room(self, room_name: str, max_players: int = 2, password_hash: str | None = None) -> str:
         room_id = str(uuid.uuid4())[:8]
-        self.rooms[room_id] = GameRoom(room_id, room_name, 2)  # Cố định 2 người
+        self.rooms[room_id] = GameRoom(room_id, room_name, 2, password_hash=password_hash)
         return room_id
+    def _hash_password(self, s: str) -> str:
+        return hashlib.sha256(s.encode('utf-8')).hexdigest()
     
     def get_room(self, room_id: str) -> GameRoom:
         return self.rooms.get(room_id)
@@ -292,8 +297,10 @@ class GameServer:
             return
         
         room_name = data.get('room_name', f'Phòng {len(self.rooms) + 1}')
-        
-        room_id = self.create_room(room_name, 2)  # Luôn tạo phòng 2 người
+        pwd_plain = (data.get('password') or '').strip()
+        pwd_hash = self._hash_password(pwd_plain) if pwd_plain else None
+
+        room_id = self.create_room(room_name, 2, password_hash=pwd_hash)
         room = self.get_room(room_id)
         
         # Thêm người tạo vào phòng
@@ -348,7 +355,20 @@ class GameServer:
                 'message': 'Phòng đã đầy (2/2 người chơi)'
             }))
             return
-        
+        if getattr(room, 'password_hash', None):
+            provided = (data.get('password') or '').strip()
+            if not provided:
+                await websocket.send(json.dumps({
+                    'type': 'error',
+                    'message': 'Phòng này yêu cầu mật khẩu.'
+                }))
+                return
+            if self._hash_password(provided) != room.password_hash:
+                await websocket.send(json.dumps({
+                    'type': 'error',
+                    'message': 'Mật khẩu không đúng.'
+                }))
+                return
         # Thêm người chơi vào phòng
         player_name = self.clients[websocket]['name']
         if room.add_player(websocket, player_name):
